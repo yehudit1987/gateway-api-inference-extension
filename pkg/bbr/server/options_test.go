@@ -20,6 +20,8 @@ import (
 	"testing"
 
 	"github.com/spf13/pflag"
+
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 )
 
 func TestNewOptionsDefaults(t *testing.T) {
@@ -213,7 +215,7 @@ func TestCompleteDerivesZapLogLevel(t *testing.T) {
 
 	// After Complete(), the zap-log-level flag should be marked as changed
 	// and the zap level should be set to -5.
-	zapFlag := fs.Lookup(ZapLogLevelFlagName)
+	zapFlag := fs.Lookup(logging.ZapLogLevelFlagName)
 	if zapFlag == nil {
 		t.Fatal("Expected zap-log-level flag to exist after AddFlags")
 	}
