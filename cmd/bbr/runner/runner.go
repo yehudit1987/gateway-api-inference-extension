@@ -42,6 +42,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/handlers"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/metrics"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/plugins"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/plugins/apikey"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/plugins/basemodelextractor"
 	runserver "sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/server"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
@@ -147,14 +148,18 @@ func (r *Runner) Run(ctx context.Context) error {
 			return nil
 		}(),
 	}
-	// label "inference.networking.k8s.io/bbr-managed" = "true" is used for server-side filtering of configmaps.
-	// only the configmap objects with this label will be tracked by bbr.
+	// label "inference.networking.k8s.io/bbr-managed" = "true" is used for server-side filtering.
+	// Only ConfigMap and Secret objects with this label will be tracked by BBR.
+	managedLabelSelector := labels.SelectorFromSet(labels.Set{
+		framework.ManagedLabel: "true",
+	})
 	cacheOptions := cache.Options{
 		ByObject: map[client.Object]cache.ByObject{
 			&corev1.ConfigMap{}: {
-				Label: labels.SelectorFromSet(labels.Set{
-					"inference.networking.k8s.io/bbr-managed": "true",
-				}),
+				Label: managedLabelSelector,
+			},
+			&corev1.Secret{}: {
+				Label: managedLabelSelector,
 			},
 		},
 	}
@@ -259,10 +264,11 @@ func (r *Runner) Run(ctx context.Context) error {
 	return nil
 }
 
-// registerInTreePlugins registers the factory functions of all known BBR plugins
+// registerInTreePlugins registers the factory functions of all known BBR plugins.
 func (r *Runner) registerInTreePlugins() {
 	framework.Register(plugins.BodyFieldToHeaderPluginType, plugins.BodyFieldToHeaderPluginFactory)
 	framework.Register(basemodelextractor.BaseModelToHeaderPluginType, basemodelextractor.BaseModelToHeaderPluginFactory)
+	framework.Register(apikey.PluginType, apikey.Factory)
 }
 
 // registerHealthServer adds the Health gRPC server as a Runnable to the given manager.

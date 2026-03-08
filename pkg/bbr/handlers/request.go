@@ -20,7 +20,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	eppb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
@@ -75,6 +78,29 @@ func (s *Server) HandleRequestBody(ctx context.Context, reqCtx *RequestContext, 
 		// to inform Envoy of the body size that will follow
 		reqCtx.Request.SetHeader(contentLengthHeader, strconv.Itoa(len(requestBodyBytes)))
 	}
+
+	// --- DEMO ONLY: pretty-print the full request after plugin processing ---
+	mutatedHeaders := reqCtx.Request.MutatedHeaders()
+	var sb strings.Builder
+	sb.WriteString("\n\n========== Request after plugins processing ==========\n")
+	sb.WriteString("POST /v1/completions\n")
+	keys := make([]string, 0, len(reqCtx.Request.Headers))
+	for k := range reqCtx.Request.Headers {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		tag := ""
+		if _, isMutated := mutatedHeaders[k]; isMutated {
+			tag = "  <-- [ADDED/MODIFIED BY PLUGIN]"
+		}
+		sb.WriteString(fmt.Sprintf("  %s: %s%s\n", k, reqCtx.Request.Headers[k], tag))
+	}
+	bodyJSON, _ := json.MarshalIndent(reqCtx.Request.Body, "  ", "  ")
+	sb.WriteString(fmt.Sprintf("\n  Body:\n  %s\n", string(bodyJSON)))
+	sb.WriteString("======================================================\n\n")
+	os.Stderr.WriteString(sb.String())
+	// --- END DEMO ---
 
 	metrics.RecordSuccessCounter()
 
