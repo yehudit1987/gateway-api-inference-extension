@@ -44,30 +44,61 @@ type ModelKeyInfo struct {
 }
 
 // SecretStore is a thread-safe in-memory store that maps model names
-// to their API key info (key + provider).
+// to their API key info (key + provider + host).
+// It also maintains a reverse index from secret key ("namespace/name")
+// to model name, so that stale entries can be cleaned up when a Secret
+// is deleted or its model-name annotation changes.
 // The SecretReconciler writes to it; the APIKeyInjectionPlugin reads from it.
 type SecretStore struct {
-	mu   sync.RWMutex
-	keys map[string]ModelKeyInfo
+	mu            sync.RWMutex
+	keys          map[string]ModelKeyInfo
+	secretToModel map[string]string
 }
 
 // NewSecretStore creates an empty SecretStore.
 func NewSecretStore() *SecretStore {
-	return &SecretStore{keys: make(map[string]ModelKeyInfo)}
+	return &SecretStore{
+		keys:          make(map[string]ModelKeyInfo),
+		secretToModel: make(map[string]string),
+	}
 }
 
-// SetModelKey stores or updates the API key info for a given model.
-func (s *SecretStore) SetModelKey(modelName string, info ModelKeyInfo) {
+// SetModelKey stores the model-to-key mapping and records the reverse
+// index from secretKey to modelName.
+func (s *SecretStore) SetModelKey(modelName string, info ModelKeyInfo, secretKey string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.keys[modelName] = info
+	if secretKey != "" {
+		s.secretToModel[secretKey] = modelName
+	}
 }
 
-// DeleteModelKey removes the API key info associated with a model.
+// DeleteModelKey removes the model entry and its reverse index entry.
 func (s *SecretStore) DeleteModelKey(modelName string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.keys, modelName)
+	for sk, mn := range s.secretToModel {
+		if mn == modelName {
+			delete(s.secretToModel, sk)
+			break
+		}
+	}
+}
+
+// DeleteBySecret looks up which model a Secret was mapped to via the
+// reverse index, then removes both the model entry and the reverse entry.
+// This handles Secret deletion (NotFound) and model-name annotation changes.
+func (s *SecretStore) DeleteBySecret(secretKey string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	modelName, ok := s.secretToModel[secretKey]
+	if !ok {
+		return
+	}
+	delete(s.keys, modelName)
+	delete(s.secretToModel, secretKey)
 }
 
 // GetModelKey returns the API key info for a model and whether it was found.

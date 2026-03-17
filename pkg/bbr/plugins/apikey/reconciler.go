@@ -39,24 +39,22 @@ func (r *SecretReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	logger := log.FromContext(ctx)
 	logger.Info("Reconciling Secret", "name", req.Name, "namespace", req.Namespace)
 
+	secretKey := req.NamespacedName.String()
 	secret := &corev1.Secret{}
 	err := r.Get(ctx, req.NamespacedName, secret)
 
 	if errors.IsNotFound(err) {
-		logger.Info("Secret deleted", "name", req.Name)
+		r.Store.DeleteBySecret(secretKey)
+		logger.Info("Secret deleted, cleaned store", "name", req.Name)
 		return ctrl.Result{}, nil
 	}
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("unable to get Secret: %w", err)
 	}
 
-	// Handle deletion (DeletionTimestamp is set).
 	if !secret.DeletionTimestamp.IsZero() {
-		modelName := secret.Annotations[ModelNameAnnotation]
-		if modelName != "" {
-			r.Store.DeleteModelKey(modelName)
-			logger.Info("Removed API key for model", "model", modelName)
-		}
+		r.Store.DeleteBySecret(secretKey)
+		logger.Info("Secret marked for deletion, cleaned store", "name", req.Name)
 		return ctrl.Result{}, nil
 	}
 
@@ -79,13 +77,16 @@ func (r *SecretReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	host := secret.Annotations[HostAnnotation]
 
+	// Clean any previous mapping for this Secret before writing the new one.
+	// This handles model-name annotation changes: the old model entry is
+	// removed so it doesn't linger as a stale mapping.
+	r.Store.DeleteBySecret(secretKey)
 	r.Store.SetModelKey(modelName, ModelKeyInfo{
 		APIKey:   string(apiKeyBytes),
 		Provider: provider,
 		Host:     host,
-	})
+	}, secretKey)
 	logger.Info("Updated API key for model", "model", modelName, "provider", provider, "host", host)
 
 	return ctrl.Result{}, nil
 }
-

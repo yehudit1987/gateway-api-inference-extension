@@ -32,7 +32,7 @@ func TestSecretStore(t *testing.T) {
 		{
 			name: "set and get returns stored info",
 			run: func(t *testing.T, s *SecretStore) {
-				s.SetModelKey("gpt-4", ModelKeyInfo{APIKey: "sk-key-1", Provider: ProviderOpenAI})
+				s.SetModelKey("gpt-4", ModelKeyInfo{APIKey: "sk-key-1", Provider: ProviderOpenAI}, "default/openai-key")
 
 				info, found := s.GetModelKey("gpt-4")
 				assert.True(t, found)
@@ -43,7 +43,7 @@ func TestSecretStore(t *testing.T) {
 		{
 			name: "set and get with host returns stored host",
 			run: func(t *testing.T, s *SecretStore) {
-				s.SetModelKey("gpt-4", ModelKeyInfo{APIKey: "sk-key-1", Provider: ProviderOpenAI, Host: "api.openai.com"})
+				s.SetModelKey("gpt-4", ModelKeyInfo{APIKey: "sk-key-1", Provider: ProviderOpenAI, Host: "api.openai.com"}, "default/openai-key")
 
 				info, found := s.GetModelKey("gpt-4")
 				assert.True(t, found)
@@ -60,8 +60,8 @@ func TestSecretStore(t *testing.T) {
 		{
 			name: "set overwrites existing entry",
 			run: func(t *testing.T, s *SecretStore) {
-				s.SetModelKey("gpt-4", ModelKeyInfo{APIKey: "old-key", Provider: ProviderOpenAI})
-				s.SetModelKey("gpt-4", ModelKeyInfo{APIKey: "new-key", Provider: ProviderAzure})
+				s.SetModelKey("gpt-4", ModelKeyInfo{APIKey: "old-key", Provider: ProviderOpenAI}, "default/key")
+				s.SetModelKey("gpt-4", ModelKeyInfo{APIKey: "new-key", Provider: ProviderAzure}, "default/key")
 
 				info, found := s.GetModelKey("gpt-4")
 				assert.True(t, found)
@@ -72,7 +72,7 @@ func TestSecretStore(t *testing.T) {
 		{
 			name: "delete removes entry",
 			run: func(t *testing.T, s *SecretStore) {
-				s.SetModelKey("gpt-4", ModelKeyInfo{APIKey: "sk-key-1", Provider: ProviderOpenAI})
+				s.SetModelKey("gpt-4", ModelKeyInfo{APIKey: "sk-key-1", Provider: ProviderOpenAI}, "default/key")
 				s.DeleteModelKey("gpt-4")
 
 				_, found := s.GetModelKey("gpt-4")
@@ -82,14 +82,14 @@ func TestSecretStore(t *testing.T) {
 		{
 			name: "delete nonexistent key is a no-op",
 			run: func(t *testing.T, s *SecretStore) {
-				s.DeleteModelKey("nonexistent") // should not panic
+				s.DeleteModelKey("nonexistent")
 			},
 		},
 		{
 			name: "multiple models are independent",
 			run: func(t *testing.T, s *SecretStore) {
-				s.SetModelKey("gpt-4", ModelKeyInfo{APIKey: "key-gpt4", Provider: ProviderOpenAI})
-				s.SetModelKey("claude", ModelKeyInfo{APIKey: "key-claude", Provider: ProviderAnthropic})
+				s.SetModelKey("gpt-4", ModelKeyInfo{APIKey: "key-gpt4", Provider: ProviderOpenAI}, "default/key-gpt4")
+				s.SetModelKey("claude", ModelKeyInfo{APIKey: "key-claude", Provider: ProviderAnthropic}, "default/key-claude")
 
 				i1, f1 := s.GetModelKey("gpt-4")
 				i2, f2 := s.GetModelKey("claude")
@@ -103,6 +103,57 @@ func TestSecretStore(t *testing.T) {
 				_, f2 = s.GetModelKey("claude")
 				assert.False(t, f1)
 				assert.True(t, f2)
+			},
+		},
+		{
+			name: "DeleteBySecret removes entry via reverse index",
+			run: func(t *testing.T, s *SecretStore) {
+				s.SetModelKey("gpt-4", ModelKeyInfo{APIKey: "sk-key", Provider: ProviderOpenAI}, "default/openai-key")
+
+				s.DeleteBySecret("default/openai-key")
+
+				_, found := s.GetModelKey("gpt-4")
+				assert.False(t, found)
+			},
+		},
+		{
+			name: "DeleteBySecret on unknown secret is a no-op",
+			run: func(t *testing.T, s *SecretStore) {
+				s.SetModelKey("gpt-4", ModelKeyInfo{APIKey: "sk-key", Provider: ProviderOpenAI}, "default/openai-key")
+
+				s.DeleteBySecret("default/unknown")
+
+				_, found := s.GetModelKey("gpt-4")
+				assert.True(t, found)
+			},
+		},
+		{
+			name: "DeleteBySecret does not affect other secrets",
+			run: func(t *testing.T, s *SecretStore) {
+				s.SetModelKey("gpt-4", ModelKeyInfo{APIKey: "key-1", Provider: ProviderOpenAI}, "default/key-1")
+				s.SetModelKey("claude", ModelKeyInfo{APIKey: "key-2", Provider: ProviderAnthropic}, "default/key-2")
+
+				s.DeleteBySecret("default/key-1")
+
+				_, f1 := s.GetModelKey("gpt-4")
+				_, f2 := s.GetModelKey("claude")
+				assert.False(t, f1)
+				assert.True(t, f2)
+			},
+		},
+		{
+			name: "model-name annotation change — old mapping cleaned on re-set",
+			run: func(t *testing.T, s *SecretStore) {
+				s.SetModelKey("gpt-4", ModelKeyInfo{APIKey: "sk-key", Provider: ProviderOpenAI}, "default/my-secret")
+
+				s.DeleteBySecret("default/my-secret")
+				s.SetModelKey("claude-3", ModelKeyInfo{APIKey: "sk-key", Provider: ProviderAnthropic}, "default/my-secret")
+
+				_, foundOld := s.GetModelKey("gpt-4")
+				info, foundNew := s.GetModelKey("claude-3")
+				assert.False(t, foundOld, "old model mapping should be gone")
+				assert.True(t, foundNew)
+				assert.Equal(t, "sk-key", info.APIKey)
 			},
 		},
 	}
@@ -125,9 +176,10 @@ func TestSecretStoreConcurrentAccess(t *testing.T) {
 		go func(n int) {
 			defer wg.Done()
 			model := fmt.Sprintf("model-%d", n)
-			s.SetModelKey(model, ModelKeyInfo{APIKey: "key", Provider: ProviderOpenAI})
+			secretKey := fmt.Sprintf("default/secret-%d", n)
+			s.SetModelKey(model, ModelKeyInfo{APIKey: "key", Provider: ProviderOpenAI}, secretKey)
 			s.GetModelKey(model)
-			s.DeleteModelKey(model)
+			s.DeleteBySecret(secretKey)
 		}(i)
 	}
 	wg.Wait()

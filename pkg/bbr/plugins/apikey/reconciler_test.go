@@ -31,16 +31,22 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/framework"
 )
 
+// preSeedEntry holds a model key info and the secret key that owns it.
+type preSeedEntry struct {
+	info      ModelKeyInfo
+	secretKey string
+}
+
 func TestReconcile(t *testing.T) {
 	tests := []struct {
-		name         string
-		secret       *corev1.Secret
-		preSeed      map[string]ModelKeyInfo
-		wantModel    string
-		wantInfo     ModelKeyInfo
-		wantFound    bool
-		wantErr      bool
-		secretName   string
+		name       string
+		secret     *corev1.Secret
+		preSeed    map[string]preSeedEntry
+		wantModel  string
+		wantInfo   ModelKeyInfo
+		wantFound  bool
+		wantErr    bool
+		secretName string
 	}{
 		{
 			name: "creates mapping with default provider (openai)",
@@ -157,19 +163,22 @@ func TestReconcile(t *testing.T) {
 					SecretDataKey: []byte("sk-new-key"),
 				},
 			},
-			preSeed: map[string]ModelKeyInfo{
-				"gpt-4": {APIKey: "sk-old-key", Provider: ProviderOpenAI},
+			preSeed: map[string]preSeedEntry{
+				"gpt-4": {info: ModelKeyInfo{APIKey: "sk-old-key", Provider: ProviderOpenAI}, secretKey: "default/openai-key"},
 			},
 			wantModel: "gpt-4",
 			wantInfo:  ModelKeyInfo{APIKey: "sk-new-key", Provider: ProviderOpenAI},
 			wantFound: true,
 		},
 		{
-			name:       "Secret not found — no error, no store change",
+			name:       "Secret not found — cleans store via reverse index",
 			secret:     nil,
 			secretName: "gone",
-			wantModel:  "gpt-4",
-			wantFound:  false,
+			preSeed: map[string]preSeedEntry{
+				"gpt-4": {info: ModelKeyInfo{APIKey: "sk-key", Provider: ProviderOpenAI}, secretKey: "default/gone"},
+			},
+			wantModel: "gpt-4",
+			wantFound: false,
 		},
 		{
 			name: "Secret missing model-name annotation — skips",
@@ -219,8 +228,8 @@ func TestReconcile(t *testing.T) {
 					SecretDataKey: []byte("sk-key"),
 				},
 			},
-			preSeed: map[string]ModelKeyInfo{
-				"gpt-4": {APIKey: "sk-key", Provider: ProviderOpenAI},
+			preSeed: map[string]preSeedEntry{
+				"gpt-4": {info: ModelKeyInfo{APIKey: "sk-key", Provider: ProviderOpenAI}, secretKey: "default/deleting"},
 			},
 			wantModel: "gpt-4",
 			wantFound: false,
@@ -230,8 +239,8 @@ func TestReconcile(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			store := NewSecretStore()
-			for model, info := range tt.preSeed {
-				store.SetModelKey(model, info)
+			for model, entry := range tt.preSeed {
+				store.SetModelKey(model, entry.info, entry.secretKey)
 			}
 
 			builder := fake.NewClientBuilder()

@@ -177,7 +177,7 @@ func TestProcessRequest(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			store := NewSecretStore()
 			for model, info := range tt.storeEntries {
-				store.SetModelKey(model, info)
+				store.SetModelKey(model, info, "")
 			}
 
 			p := newTestPlugin(tt.cfg, store)
@@ -219,7 +219,7 @@ func TestProcessRequestNilStore(t *testing.T) {
 
 func TestProcessRequestMutationTracking(t *testing.T) {
 	store := NewSecretStore()
-	store.SetModelKey("gpt-4", ModelKeyInfo{APIKey: "sk-key", Provider: ProviderOpenAI})
+	store.SetModelKey("gpt-4", ModelKeyInfo{APIKey: "sk-key", Provider: ProviderOpenAI}, "")
 
 	p := newTestPlugin(Config{}, store)
 	req := newTestRequest(map[string]string{"X-Gateway-Model-Name": "gpt-4"}, map[string]any{})
@@ -236,7 +236,7 @@ func TestProcessRequestHostInjection(t *testing.T) {
 	store := NewSecretStore()
 	store.SetModelKey("httpbin-model", ModelKeyInfo{
 		APIKey: "sk-dummy", Provider: ProviderOpenAI, Host: "httpbin.org",
-	})
+	}, "")
 
 	p := newTestPlugin(Config{}, store)
 	req := newTestRequest(map[string]string{"X-Gateway-Model-Name": "httpbin-model"}, map[string]any{})
@@ -256,7 +256,7 @@ func TestProcessRequestNoHostWhenEmpty(t *testing.T) {
 	store := NewSecretStore()
 	store.SetModelKey("gpt-4", ModelKeyInfo{
 		APIKey: "sk-key", Provider: ProviderOpenAI, Host: "",
-	})
+	}, "")
 
 	p := newTestPlugin(Config{}, store)
 	req := newTestRequest(map[string]string{"X-Gateway-Model-Name": "gpt-4"}, map[string]any{})

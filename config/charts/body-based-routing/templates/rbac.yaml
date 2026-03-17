@@ -3,7 +3,7 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: bbr-configmap-reader
+  name: bbr-resource-reader
 rules:
 - apiGroups: [""]
   resources: ["configmaps", "secrets"]
@@ -12,7 +12,7 @@ rules:
 kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
-  name: bbr-configmap-reader
+  name: bbr-resource-reader
 subjects:
 - kind: ServiceAccount
   name: {{ .Values.bbr.name }}-{{ .Release.Name }}
@@ -20,13 +20,13 @@ subjects:
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: bbr-configmap-reader
+  name: bbr-resource-reader
 {{- else }} ## if bbr is set in a single namespace
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: {{ .Values.bbr.name }}-{{ .Release.Name }}-configmap-reader
+  name: {{ .Values.bbr.name }}-{{ .Release.Name }}-resource-reader
   namespace: {{ .Release.Namespace }}
 rules:
 - apiGroups: [""]
@@ -45,7 +45,7 @@ subjects:
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: {{ .Values.bbr.name }}-{{ .Release.Name }}-configmap-reader
+  name: {{ .Values.bbr.name }}-{{ .Release.Name }}-resource-reader
 {{- end }}
 ---
 apiVersion: v1
