@@ -17,10 +17,30 @@ spec:
       authority: "myext.com"
       timeout: 1s
       supportedEvents:
+      {{- if .Values.provider.supportedEvents.requestHeaders }}
       - RequestHeaders
+      {{- end }}
+      {{- if .Values.provider.supportedEvents.requestBody }}
       - RequestBody
+      {{- end }}
+      {{- if .Values.provider.supportedEvents.requestTrailers }}
       - RequestTrailers
-      requestBodySendMode: "FullDuplexStreamed"
+      {{- end }}
+      {{- if .Values.provider.supportedEvents.responseHeaders }}
+      - ResponseHeaders
+      {{- end }}
+      {{- if .Values.provider.supportedEvents.responseBody }}
+      - ResponseBody
+      {{- end }}
+      {{- if .Values.provider.supportedEvents.responseTrailers }}
+      - ResponseTrailers
+      {{- end }}
+      {{- if .Values.provider.supportedEvents.requestBody }}
+      requestBodySendMode: {{ .Values.provider.requestBodySendMode | quote }}
+      {{- end }}
+      {{- if .Values.provider.supportedEvents.responseBody }}
+      responseBodySendMode: {{ .Values.provider.responseBodySendMode | quote }}
+      {{- end }}
       backendRef:
         group: ""
         kind: Service

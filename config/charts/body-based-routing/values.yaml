@@ -38,6 +38,23 @@ bbr:
 provider:
   name: none
 
+  # ext_proc events configuration.
+  # Controls which HTTP lifecycle events are sent to BBR for processing.
+  # Enable only the events your plugins actually need to reduce latency.
+  supportedEvents:
+    requestHeaders: true
+    requestBody: true
+    requestTrailers: true
+    responseHeaders: false
+    responseBody: false
+    responseTrailers: false
+
+  # Body send mode for request/response body events.
+  # Options: "Buffered", "Streamed", "FullDuplexStreamed"
+  # FullDuplexStreamed allows bidirectional streaming (recommended for LLM inference).
+  requestBodySendMode: "FullDuplexStreamed"
+  responseBodySendMode: "FullDuplexStreamed"
+
   # Istio-specific configuration.
   # This block is only used if name is "istio".
   istio:

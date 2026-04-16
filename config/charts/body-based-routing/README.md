@@ -58,6 +58,32 @@ bbr:
     - type: ...
 ```
 
+### Configure ext_proc Events
+
+By default, BBR receives request events only (headers, body, trailers). If your plugins need to process response data (e.g., counting tokens in the response), enable the corresponding response events:
+
+```bash
+# Enable response body event for plugins that need to inspect responses
+$ helm install body-based-router ./config/charts/body-based-routing \
+    --set provider.name=istio \
+    --set provider.supportedEvents.responseBody=true
+```
+
+Or in `values.yaml`:
+```yaml
+provider:
+  name: istio
+  supportedEvents:
+    requestHeaders: true
+    requestBody: true
+    requestTrailers: true
+    responseHeaders: false
+    responseBody: true      # Enable if plugins need response body
+    responseTrailers: false
+```
+
+> **Tip:** Only enable events your plugins need. Each extra event adds a network hop between the proxy and BBR.
+
 ### Uninstall
 
 Run the following command to uninstall the chart:
@@ -84,6 +110,14 @@ The following table list the configurable parameters of the chart.
 | `bbr.flags`                  | map of flags which are passed through to bbr. Refer to [runner.go](https://github.com/kubernetes-sigs/gateway-api-inference-extension/blob/main/cmd/bbr/runner/runner.go) for complete list.                                                                                                     |
 | `bbr.plugins`   | Custom ordered plugins array to set for BBR. each plugin have fields: type, name and optionally json (which represents parameters of the plugin). If not specified, BBR will use by default the `body-field-to-header` to extract the `model` field, and `base-model-to-header` (in that order). |
 | `provider.name`              | Name of the Inference Gateway implementation being used. Possible values: `istio`, `gke`. Defaults to `none`.                                                                                                                                                                                    |
+| `provider.supportedEvents.requestHeaders` | Enable Request Headers event. Defaults to `true`. |
+| `provider.supportedEvents.requestBody` | Enable Request Body event. Defaults to `true`. |
+| `provider.supportedEvents.requestTrailers` | Enable Request Trailers event. Defaults to `true`. |
+| `provider.supportedEvents.responseHeaders` | Enable Response Headers event. Defaults to `false`. |
+| `provider.supportedEvents.responseBody` | Enable Response Body event. Defaults to `false`. |
+| `provider.supportedEvents.responseTrailers` | Enable Response Trailers event. Defaults to `false`. |
+| `provider.requestBodySendMode` | Body send mode for request body. Options: `Buffered`, `Streamed`, `FullDuplexStreamed`. Defaults to `FullDuplexStreamed`. |
+| `provider.responseBodySendMode` | Body send mode for response body. Options: `Buffered`, `Streamed`, `FullDuplexStreamed`. Defaults to `FullDuplexStreamed`. |
 | `inferenceGateway.name`      | The name of the Gateway. Defaults to `inference-gateway`.                                                                                                                                                                                                                                       |
 
 ## Notes
