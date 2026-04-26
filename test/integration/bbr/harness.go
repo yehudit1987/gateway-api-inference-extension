@@ -53,7 +53,7 @@ type BBRHarness struct {
 
 // NewBBRHarness boots up an isolated BBR server on a random port with the default
 // BodyFieldToHeaderPlugin for model extraction and no response plugins.
-func NewBBRHarness(t *testing.T, ctx context.Context, streaming bool) *BBRHarness {
+func NewBBRHarness(t *testing.T, ctx context.Context) *BBRHarness {
 	t.Helper()
 	modelToHeaderPlugin, err := bodyfieldtoheader.NewBodyFieldToHeaderPlugin(modelField, bodyfieldtoheader.ModelHeader)
 	require.NoError(t, err, "failed to create body-field-to-header plugin")
@@ -94,7 +94,7 @@ func NewBBRHarness(t *testing.T, ctx context.Context, streaming bool) *BBRHarnes
 
 	baseModelToHeaderPlugin := &basemodelextractor.BaseModelToHeaderPlugin{AdaptersStore: store}
 
-	return NewBBRHarnessWithPlugins(t, ctx, streaming, []framework.RequestProcessor{modelToHeaderPlugin, baseModelToHeaderPlugin}, []framework.ResponseProcessor{})
+	return NewBBRHarnessWithPlugins(t, ctx, []framework.RequestProcessor{modelToHeaderPlugin, baseModelToHeaderPlugin}, []framework.ResponseProcessor{})
 }
 
 // NewBBRHarnessWithPlugins boots up an isolated BBR server on a random port
@@ -102,7 +102,6 @@ func NewBBRHarness(t *testing.T, ctx context.Context, streaming bool) *BBRHarnes
 func NewBBRHarnessWithPlugins(
 	t *testing.T,
 	ctx context.Context,
-	streaming bool,
 	requestPlugins []framework.RequestProcessor,
 	responsePlugins []framework.ResponseProcessor,
 ) *BBRHarness {
@@ -113,9 +112,8 @@ func NewBBRHarnessWithPlugins(
 	require.NoError(t, err, "failed to acquire free port for BBR server")
 
 	// 2. Configure BBR Server with plugins
-	runner := runserver.NewDefaultExtProcServerRunner(port, false)
+	runner := runserver.NewDefaultExtProcServerRunner(port)
 	runner.SecureServing = false
-	runner.Streaming = streaming
 	runner.RequestPlugins = requestPlugins
 	runner.ResponsePlugins = responsePlugins
 

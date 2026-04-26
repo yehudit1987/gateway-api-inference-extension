@@ -19,7 +19,6 @@ spec:
         image: {{ .Values.bbr.image.registry }}/{{ .Values.bbr.image.repository }}:{{ .Values.bbr.image.tag }}
         imagePullPolicy: {{ .Values.bbr.image.pullPolicy }}
         args:
-        - "--streaming"
         # Pass additional flags via the bbr.flags field in values.yaml.
         {{- range $key, $value := .Values.bbr.flags }}
         - --{{ $key }}={{ $value }}
