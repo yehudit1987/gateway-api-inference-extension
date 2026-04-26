@@ -35,39 +35,34 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/test/utils"
 )
 
-func TestHandleRequestBodyStreaming(t *testing.T) {
+func TestHandleRequestBody(t *testing.T) {
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
 
 	b, _ := json.Marshal(map[string]any{"model": "foo"})
-	cases := []struct {
-		desc      string
-		streaming bool
-		body      []byte
-		want      []*extProcPb.ProcessingResponse
-	}{
+	want := []*extProcPb.ProcessingResponse{
 		{
-			desc: "no-streaming",
-			body: b,
-			want: []*extProcPb.ProcessingResponse{
-				{
-					Response: &extProcPb.ProcessingResponse_RequestBody{
-						RequestBody: &extProcPb.BodyResponse{
-							Response: &extProcPb.CommonResponse{
-								ClearRouteCache: true,
-								HeaderMutation: &extProcPb.HeaderMutation{
-									SetHeaders: []*basepb.HeaderValueOption{
-										{
-											Header: &basepb.HeaderValue{
-												Key:      bodyfieldtoheader.ModelHeader,
-												RawValue: []byte("foo"),
-											},
-										},
-										{
-											Header: &basepb.HeaderValue{
-												Key:      basemodelextractor.BaseModelHeader,
-												RawValue: []byte(""),
-											},
-										},
+			Response: &extProcPb.ProcessingResponse_RequestHeaders{
+				RequestHeaders: &extProcPb.HeadersResponse{
+					Response: &extProcPb.CommonResponse{
+						ClearRouteCache: true,
+						HeaderMutation: &extProcPb.HeaderMutation{
+							SetHeaders: []*basepb.HeaderValueOption{
+								{
+									Header: &basepb.HeaderValue{
+										Key:      contentLengthHeader,
+										RawValue: []byte(strconv.Itoa(len(b))),
+									},
+								},
+								{
+									Header: &basepb.HeaderValue{
+										Key:      bodyfieldtoheader.ModelHeader,
+										RawValue: []byte("foo"),
+									},
+								},
+								{
+									Header: &basepb.HeaderValue{
+										Key:      basemodelextractor.BaseModelHeader,
+										RawValue: []byte(""),
 									},
 								},
 							},
@@ -77,52 +72,14 @@ func TestHandleRequestBodyStreaming(t *testing.T) {
 			},
 		},
 		{
-			desc:      "streaming",
-			streaming: true,
-			body:      b,
-			want: []*extProcPb.ProcessingResponse{
-				{
-					Response: &extProcPb.ProcessingResponse_RequestHeaders{
-						RequestHeaders: &extProcPb.HeadersResponse{
-							Response: &extProcPb.CommonResponse{
-								ClearRouteCache: true,
-								HeaderMutation: &extProcPb.HeaderMutation{
-									SetHeaders: []*basepb.HeaderValueOption{
-										{
-											Header: &basepb.HeaderValue{
-												Key:      contentLengthHeader,
-												RawValue: []byte(strconv.Itoa(len(b))),
-											},
-										},
-										{
-											Header: &basepb.HeaderValue{
-												Key:      bodyfieldtoheader.ModelHeader,
-												RawValue: []byte("foo"),
-											},
-										},
-										{
-											Header: &basepb.HeaderValue{
-												Key:      basemodelextractor.BaseModelHeader,
-												RawValue: []byte(""),
-											},
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-				{
-					Response: &extProcPb.ProcessingResponse_RequestBody{
-						RequestBody: &extProcPb.BodyResponse{
-							Response: &extProcPb.CommonResponse{
-								BodyMutation: &extProcPb.BodyMutation{
-									Mutation: &extProcPb.BodyMutation_StreamedResponse{
-										StreamedResponse: &extProcPb.StreamedBodyResponse{
-											Body:        b,
-											EndOfStream: true,
-										},
-									},
+			Response: &extProcPb.ProcessingResponse_RequestBody{
+				RequestBody: &extProcPb.BodyResponse{
+					Response: &extProcPb.CommonResponse{
+						BodyMutation: &extProcPb.BodyMutation{
+							Mutation: &extProcPb.BodyMutation_StreamedResponse{
+								StreamedResponse: &extProcPb.StreamedBodyResponse{
+									Body:        b,
+									EndOfStream: true,
 								},
 							},
 						},
@@ -131,35 +88,32 @@ func TestHandleRequestBodyStreaming(t *testing.T) {
 			},
 		},
 	}
-	baseModelToHeaderPlugin := &basemodelextractor.BaseModelToHeaderPlugin{AdaptersStore: basemodelextractor.NewAdaptersStore()}
-	for _, tc := range cases {
-		t.Run(tc.desc, func(t *testing.T) {
-			modelToHeaderPlugin, _ := bodyfieldtoheader.NewBodyFieldToHeaderPlugin(modelField, bodyfieldtoheader.ModelHeader)
-			srv := NewServer(tc.streaming, []framework.RequestProcessor{modelToHeaderPlugin, baseModelToHeaderPlugin}, []framework.ResponseProcessor{})
-			reqCtx := &RequestContext{
-				CycleState: framework.NewCycleState(),
-				Request:    framework.NewInferenceRequest(),
-			}
-			got, err := srv.HandleRequestBody(ctx, reqCtx, tc.body)
-			if err != nil {
-				t.Fatalf("HandleRequestBody(): %v", err)
-			}
 
-			// sort headers in responses for deterministic tests
-			envoytest.SortSetHeadersInResponses(tc.want)
-			envoytest.SortSetHeadersInResponses(got)
-			if diff := cmp.Diff(tc.want, got, protocmp.Transform()); diff != "" {
-				t.Errorf("HandleRequestBody returned unexpected response, diff(-want, +got): %v", diff)
-			}
-		})
+	baseModelToHeaderPlugin := &basemodelextractor.BaseModelToHeaderPlugin{AdaptersStore: basemodelextractor.NewAdaptersStore()}
+	modelToHeaderPlugin, _ := bodyfieldtoheader.NewBodyFieldToHeaderPlugin(modelField, bodyfieldtoheader.ModelHeader)
+	srv := NewServer([]framework.RequestProcessor{modelToHeaderPlugin, baseModelToHeaderPlugin}, []framework.ResponseProcessor{})
+	reqCtx := &RequestContext{
+		CycleState: framework.NewCycleState(),
+		Request:    framework.NewInferenceRequest(),
+	}
+	got, err := srv.HandleRequestBody(ctx, reqCtx, b)
+	if err != nil {
+		t.Fatalf("HandleRequestBody(): %v", err)
+	}
+
+	// sort headers in responses for deterministic tests
+	envoytest.SortSetHeadersInResponses(want)
+	envoytest.SortSetHeadersInResponses(got)
+	if diff := cmp.Diff(want, got, protocmp.Transform()); diff != "" {
+		t.Errorf("HandleRequestBody returned unexpected response, diff(-want, +got): %v", diff)
 	}
 }
 
-func TestHandleResponseBody_Streaming(t *testing.T) {
+func TestHandleResponseBody_ChunkedStreaming(t *testing.T) {
 	ctx := logutil.NewTestLoggerIntoContext(context.Background())
 	wantFullBody := []byte(`{"choices":[{"text":"Hello!"}]}`)
 
-	ref := NewServer(true, []framework.RequestProcessor{}, []framework.ResponseProcessor{})
+	ref := NewServer([]framework.RequestProcessor{}, []framework.ResponseProcessor{})
 	want, err := ref.HandleResponseBody(ctx, newTestRequestContext(), wantFullBody)
 	if err != nil {
 		t.Fatalf("reference HandleResponseBody: %v", err)
@@ -199,7 +153,7 @@ func TestHandleResponseBody_Streaming(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			streamCtx, cancel := context.WithCancel(logutil.NewTestLoggerIntoContext(context.Background()))
-			srv := NewServer(true, []framework.RequestProcessor{}, []framework.ResponseProcessor{})
+			srv := NewServer([]framework.RequestProcessor{}, []framework.ResponseProcessor{})
 			testListener, errChan := utils.SetupTestStreamingServer(t, streamCtx, srv)
 			process, conn := utils.GetStreamingServerClient(streamCtx, t)
 			defer conn.Close()
@@ -249,7 +203,7 @@ func TestHandleResponseBody_Streaming(t *testing.T) {
 			envoytest.SortSetHeadersInResponses(want)
 			envoytest.SortSetHeadersInResponses(got)
 			if diff := cmp.Diff(want, got, protocmp.Transform()); diff != "" {
-				t.Errorf("unexpected ProcessingResponse after buffered streaming response body, diff(-want, +got): %s", diff)
+				t.Errorf("unexpected ProcessingResponse after streaming response body, diff(-want, +got): %s", diff)
 			}
 		})
 	}
